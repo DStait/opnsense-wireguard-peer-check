@@ -61,30 +61,22 @@ func checkErr(e error) {
 	}
 }
 
-func getPeers(client *http.Client, auth string, url string) string {
+func getPeers(auth string, url string) []byte {
 	const getClientsPath string = "/api/wireguard/client/searchClient"
 
 	getClientsURL := fmt.Sprintf("%s%s", url, getClientsPath)
 
-	req, err := http.NewRequest("GET", getClientsURL, nil)
-	checkErr(err)
-	// Set Authorization header
-	req.Header.Add("Authorization", "Basic "+auth)
+	req, code := makeRequest("GET", getClientsURL, auth, nil)
+	if code != 200 {
+		log.Fatal(req)
+	}
 
-	resp, err := client.Do(req)
-	checkErr(err)
-	defer resp.Body.Close()
-
-	// Read the response body and convert it to string
-	resBody, _ := io.ReadAll(resp.Body)
-	response := string(resBody)
-
-	return response
+	return req
 }
 
-func getWantedPeers(peersString string, searchString string) []PeerConfig {
+func getWantedPeers(peers []byte, searchString string) []PeerConfig {
 	allPeersResp := PeerResp{}
-	json.Unmarshal([]byte(peersString), &allPeersResp)
+	json.Unmarshal(peers, &allPeersResp)
 
 	peersWanted := []PeerConfig{}
 	for _, v := range allPeersResp.Rows {
@@ -221,14 +213,10 @@ func main() {
 
 	fmt.Printf("Working on Firewall %s\n\n", config.FirewallUrl)
 
-	// Peers use an id, we need to get all of these and find the ones that match our
-	// criteria.
-
 	// Encode credentials here so they can be used by all functions
 	encodedAuth := base64.StdEncoding.EncodeToString([]byte(config.Key + ":" + config.Secret))
-	httpClient := &http.Client{}
 
-	allPeers := getPeers(httpClient, encodedAuth, config.FirewallUrl)
+	allPeers := getPeers(encodedAuth, config.FirewallUrl)
 	wantedPeers := getWantedPeers(allPeers, config.ServerName)
 
 	// Get wireguard server details as we'll need the uuid of them when setting the peer
